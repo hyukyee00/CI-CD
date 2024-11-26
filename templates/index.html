@@ -1,10 +1,404 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-    <title>Card Game</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포커 게임</title>
+    <style>
+        body {
+            background-color: #277234;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        #game {
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .card-area {
+            background-color: #1b5524;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            min-height: 200px;
+        }
+
+        .card {
+            width: 120px;
+            height: 180px;
+            background: white;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin: 10px;
+            border-radius: 10px;
+            font-size: 28px;
+            color: black;
+            border: 2px solid #000;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .card.selected {
+            border: 2px solid yellow;
+            box-shadow: 0 0 10px yellow;
+        }
+
+        .card-back {
+            background: linear-gradient(45deg, #1a237e, #3949ab);
+            color: transparent !important;
+        }
+
+        .card-back::after {
+            content: "🎴";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: white;
+        }
+
+        .red {
+            color: red;
+        }
+
+        .black {
+            color: black;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #ffd700;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #ffed4a;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            font-size: 20px;
+            margin: 20px;
+            padding: 10px;
+            background-color: rgba(0,0,0,0.3);
+            border-radius: 5px;
+        }
+
+        .betting-controls {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .betting-controls button {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        #currentBet {
+            font-size: 24px;
+            min-width: 80px;
+            color: #ffd700;
+        }
+
+        #score {
+            font-size: 24px;
+            margin: 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Card Game</h1>
-    <!-- 여기에 카드 게임 관련 HTML 코드 추가 -->
+    <div id="game">
+        <h1>포커 게임</h1>
+        <div id="score">
+            칩: <span id="chips">1000</span>
+            <div class="betting-controls">
+                <button id="decreaseBet">-</button>
+                <span id="currentBet">100</span>
+                <button id="increaseBet">+</button>
+            </div>
+        </div>
+        <div id="dealer-area" class="card-area">
+            <h2>딜러의 카드</h2>
+            <div id="dealer-cards"></div>
+        </div>
+        <div id="player-area" class="card-area">
+            <h2>플레이어의 카드</h2>
+            <div id="player-cards"></div>
+        </div>
+        <div id="status"></div>
+        <div class="controls">
+            <button id="dealBtn">게임 시작</button>
+            <button id="changeBtn" disabled>카드 교체</button>
+            <button id="standBtn" disabled>승부</button>
+            <button id="newGameBtn">새 게임</button>
+        </div>
+    </div>
+
+    <script>
+        const dealerCards = document.getElementById('dealer-cards');
+        const playerCards = document.getElementById('player-cards');
+        const dealBtn = document.getElementById('dealBtn');
+        const changeBtn = document.getElementById('changeBtn');
+        const standBtn = document.getElementById('standBtn');
+        const newGameBtn = document.getElementById('newGameBtn');
+        const statusDiv = document.getElementById('status');
+        const chipsSpan = document.getElementById('chips');
+
+        let deck = [];
+        let playerHand = [];
+        let dealerHand = [];
+        let chips = 1000;
+        let selectedCards = new Set();
+        let currentBet = 100;
+        const MIN_BET = 10;
+        const MAX_BET = 500;
+        const BET_STEP = 10;
+
+        function createDeck() {
+            deck = [];
+            // 2덱 사용
+            for (let i = 0; i < 2; i++) {
+                const suits = ['♥', '♠', '♣', '♦'];
+                const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+                
+                for (let suit of suits) {
+                    for (let value of values) {
+                        deck.push({suit, value});
+                    }
+                }
+            }
+            shuffle();
+        }
+
+        function shuffle() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function getCardValue(value) {
+            const values = {
+                'A': 14,
+                'K': 13,
+                'Q': 12,
+                'J': 11
+            };
+            return values[value] || parseInt(value);
+        }
+
+        function createCardElement(card, isPlayer = false, index = 0) {
+            const cardElement = document.createElement('div');
+            cardElement.className = 'card ' + (card.suit === '♥' || card.suit === '♦' ? 'red' : 'black');
+            cardElement.textContent = `${card.suit}${card.value}`;
+            
+            if (isPlayer) {
+                cardElement.onclick = () => toggleCardSelection(cardElement, index);
+            }
+            
+            return cardElement;
+        }
+
+        function displayCards(showDealer = false) {
+            playerCards.innerHTML = '';
+            dealerCards.innerHTML = '';
+            
+            playerHand.forEach((card, index) => {
+                const cardElement = createCardElement(card, true, index);
+                if (selectedCards.has(index)) {
+                    cardElement.classList.add('selected');
+                }
+                playerCards.appendChild(cardElement);
+            });
+            
+            dealerHand.forEach(card => {
+                const cardElement = createCardElement(card);
+                if (!showDealer) {
+                    cardElement.classList.add('card-back');
+                }
+                dealerCards.appendChild(cardElement);
+            });
+        }
+
+        function toggleCardSelection(cardElement, index) {
+            if (changeBtn.disabled) return;
+            
+            if (selectedCards.has(index)) {
+                selectedCards.delete(index);
+                cardElement.classList.remove('selected');
+            } else if (selectedCards.size < 3) {
+                selectedCards.add(index);
+                cardElement.classList.add('selected');
+            }
+        }
+
+        function increaseBet() {
+            if (currentBet + BET_STEP <= MAX_BET && currentBet + BET_STEP <= chips) {
+                currentBet += BET_STEP;
+                document.getElementById('currentBet').textContent = currentBet;
+            }
+        }
+
+        function decreaseBet() {
+            if (currentBet - BET_STEP >= MIN_BET) {
+                currentBet -= BET_STEP;
+                document.getElementById('currentBet').textContent = currentBet;
+            }
+        }
+
+        function dealInitialCards() {
+            if (chips < currentBet) {
+                alert('칩이 부족합니다!');
+                return;
+            }
+            
+            if (deck.length < 20) {
+                createDeck();
+            }
+            
+            chips -= currentBet;
+            chipsSpan.textContent = chips;
+            
+            playerHand = [];
+            dealerHand = [];
+            selectedCards.clear();
+            
+            for (let i = 0; i < 5; i++) {
+                playerHand.push(deck.pop());
+                dealerHand.push(deck.pop());
+            }
+            
+            displayCards(false);
+            dealBtn.disabled = true;
+            changeBtn.disabled = false;
+            standBtn.disabled = false;
+            document.getElementById('increaseBet').disabled = true;
+            document.getElementById('decreaseBet').disabled = true;
+            statusDiv.textContent = '교체할 카드를 선택하세요 (최대 3장)';
+        }
+
+        function changeCards() {
+            for (let index of selectedCards) {
+                playerHand[index] = deck.pop();
+            }
+            
+            displayCards(false);
+            changeBtn.disabled = true;
+            selectedCards.clear();
+            statusDiv.textContent = '승부하세요!';
+        }
+
+        function evaluateHand(hand) {
+            const values = hand.map(card => getCardValue(card.value)).sort((a, b) => b - a);
+            const suits = hand.map(card => card.suit);
+            const valueCounts = {};
+            values.forEach(value => {
+                valueCounts[value] = (valueCounts[value] || 0) + 1;
+            });
+            
+            const counts = Object.values(valueCounts).sort((a, b) => b - a);
+            const isFlush = suits.every(suit => suit === suits[0]);
+            const isStraight = values.every((value, index) => 
+                index === 0 || value === values[index - 1] - 1
+            );
+            
+            if (isFlush && isStraight) return { rank: 8, name: "스트레이트 플러시", value: values[0] };
+            if (counts[0] === 4) return { rank: 7, name: "포카드", value: Number(Object.keys(valueCounts).find(key => valueCounts[key] === 4)) };
+            if (counts[0] === 3 && counts[1] === 2) return { rank: 6, name: "풀하우스", value: Number(Object.keys(valueCounts).find(key => valueCounts[key] === 3)) };
+            if (isFlush) return { rank: 5, name: "플러시", value: values[0] };
+            if (isStraight) return { rank: 4, name: "스트레이트", value: values[0] };
+            if (counts[0] === 3) return { rank: 3, name: "트리플", value: Number(Object.keys(valueCounts).find(key => valueCounts[key] === 3)) };
+            if (counts[0] === 2 && counts[1] === 2) return { rank: 2, name: "투페어", value: Math.max(...Object.keys(valueCounts).filter(key => valueCounts[key] === 2).map(Number)) };
+            if (counts[0] === 2) return { rank: 1, name: "원페어", value: Number(Object.keys(valueCounts).find(key => valueCounts[key] === 2)) };
+            return { rank: 0, name: "하이카드", value: values[0] };
+        }
+
+        function showdown() {
+            displayCards(true);
+            
+            const playerResult = evaluateHand(playerHand);
+            const dealerResult = evaluateHand(dealerHand);
+            
+            let result;
+            if (playerResult.rank > dealerResult.rank) {
+                result = `승리! (${playerResult.name})`;
+                chips += currentBet * 2;
+            } else if (playerResult.rank < dealerResult.rank) {
+                result = `패배 (딜러: ${dealerResult.name})`;
+            } else {
+                if (playerResult.value > dealerResult.value) {
+                    result = `승리! (높은 ${playerResult.name})`;
+                    chips += currentBet * 2;
+                } else if (playerResult.value < dealerResult.value) {
+                    result = `패배 (딜러: 높은 ${dealerResult.name})`;
+                } else {
+                    result = "무승부";
+                    chips += currentBet;
+                }
+            }
+            
+            statusDiv.textContent = result;
+            chipsSpan.textContent = chips;
+            dealBtn.disabled = false;
+            standBtn.disabled = true;
+            document.getElementById('increaseBet').disabled = false;
+            document.getElementById('decreaseBet').disabled = false;
+        }
+
+        function newGame() {
+            createDeck();
+            playerHand = [];
+            dealerHand = [];
+            selectedCards.clear();
+            chips = 1000;
+            currentBet = 100;
+            document.getElementById('currentBet').textContent = currentBet;
+            chipsSpan.textContent = chips;
+            playerCards.innerHTML = '';
+            dealerCards.innerHTML = '';
+            statusDiv.textContent = '';
+            dealBtn.disabled = false;
+            changeBtn.disabled = true;
+            standBtn.disabled = true;
+            document.getElementById('increaseBet').disabled = false;
+            document.getElementById('decreaseBet').disabled = false;
+        }
+
+        // 이벤트 리스너 등록
+        dealBtn.addEventListener('click', dealInitialCards);
+        changeBtn.addEventListener('click', changeCards);
+        standBtn.addEventListener('click', showdown);
+        newGameBtn.addEventListener('click', newGame);
+        document.getElementById('increaseBet').addEventListener('click', increaseBet);
+        document.getElementById('decreaseBet').addEventListener('click', decreaseBet);
+
+        // 초기 게임 설정
+        createDeck();
+    </script>
 </body>
 </html>
