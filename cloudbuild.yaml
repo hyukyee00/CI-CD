@@ -1,0 +1,22 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast3-docker.pkg.dev/${PROJECT_ID}/card-game-repo/card-game:latest'
+      - '.'
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-northeast3-docker.pkg.dev/${PROJECT_ID}/card-game-repo/card-game:latest'
+  
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+    - run
+    - --filename=k8s/
+    - --location=asia-northeast3-a
+    - --cluster=card-game-cluster
+
+images:
+  - 'asia-northeast3-docker.pkg.dev/${PROJECT_ID}/card-game-repo/card-game:latest'
